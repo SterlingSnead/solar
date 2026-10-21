@@ -371,7 +371,19 @@ public final class NavidromeClient {
         });
     }
 
-    private static NavidromeSong parseSong(JSONObject o) throws org.json.JSONException {
+    /**
+     * 2026-10-21 — Blocking Subsonic call for background sync; layman: ask the server and wait for the answer.
+     * Tech: same token-auth URL + SolarHttp stack as the async calls; throws when status != ok.
+     */
+    JSONObject callBlocking(String endpoint, String extra) throws Exception {
+        JSONObject root = fetchJson(buildUrl(endpoint, extra));
+        JSONObject sr = root.getJSONObject("subsonic-response");
+        if (!"ok".equals(sr.optString("status"))) throw new Exception(extractError(root));
+        return sr;
+    }
+
+    // 2026-10-21 — Package-private so NavidromeSync reuses one song parser (was private).
+    static NavidromeSong parseSong(JSONObject o) throws org.json.JSONException {
         NavidromeSong s = new NavidromeSong();
         s.id = o.getString("id");
         s.title = o.optString("title", "");
@@ -380,6 +392,8 @@ public final class NavidromeClient {
         s.durationSec = o.optInt("duration", 0);
         s.suffix = o.optString("suffix", "mp3");
         s.coverArtId = o.optString("coverArt", null);
+        // 2026-10-21 — Prefer album artist for folder naming; falls back to track artist on old servers.
+        s.albumArtist = o.optString("displayAlbumArtist", o.optString("albumArtist", s.artist));
         return s;
     }
 

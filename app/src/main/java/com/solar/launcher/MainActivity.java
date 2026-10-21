@@ -1896,6 +1896,8 @@ public class MainActivity extends Activity {
     private boolean librarySearchJellyfinSearching;
     private boolean librarySearchJellyfinActive;
     private NavidromeSettingsHost navidromeSettingsHost;
+    // 2026-10-21 — BookOrbit audiobook server settings (shares Navidrome's Actions plumbing).
+    private com.solar.launcher.bookorbit.BookOrbitSettingsHost bookOrbitSettingsHost;
     private PlexSettingsHost plexSettingsHost;
     private com.solar.launcher.jellyfin.JellyfinSettingsHost jellyfinSettingsHost;
     private com.solar.launcher.scrobble.ScrobbleSettingsHost scrobbleSettingsHost;
@@ -9833,6 +9835,12 @@ public class MainActivity extends Activity {
         if (hasInternetConnection()) {
             SolarAutoTime.onInternetAvailable(this);
             SolarGeoRegion.onInternetAvailable(this);
+            // 2026-10-21 — Opt-in background sync on Wi-Fi (each checks its own pref + 30 min throttle).
+            Runnable rescan = new Runnable() {
+                @Override public void run() { startLibraryScan(false); }
+            };
+            com.solar.launcher.navidrome.NavidromeSync.maybeAuto(this, prefs, rescan);
+            com.solar.launcher.bookorbit.BookOrbitSync.maybeAuto(this, prefs, rescan);
         }
         scheduleSoulseekSharePolicyRefresh();
     }
@@ -13343,6 +13351,13 @@ public class MainActivity extends Activity {
         if (keyboardPurpose == NavidromeSettingsHost.KEYBOARD_PASS) {
             return getString(R.string.navidrome_settings_pass);
         }
+        // 2026-10-21 — Sync tag + BookOrbit field titles.
+        if (keyboardPurpose == NavidromeSettingsHost.KEYBOARD_SYNC_TAG) {
+            return getString(R.string.navidrome_sync_tag);
+        }
+        if (com.solar.launcher.bookorbit.BookOrbitSettingsHost.ownsKeyboard(keyboardPurpose)) {
+            return getString(com.solar.launcher.bookorbit.BookOrbitSettingsHost.keyboardTitleRes(keyboardPurpose));
+        }
         if (keyboardPurpose == NavidromeScreenHost.KEYBOARD_SEARCH) {
             return getString(R.string.navidrome_search_title, keyboardPrefill != null ? keyboardPrefill : "");
         }
@@ -15075,6 +15090,8 @@ public class MainActivity extends Activity {
                 buildLibraryBrowseSettingsUI();
             } else if (SettingsScreens.NAVIDROME.equals(settingsSubScreenKey)) {
                 buildNavidromeSettingsUI();
+            } else if (SettingsScreens.BOOKORBIT.equals(settingsSubScreenKey)) {
+                buildBookOrbitSettingsUI();
             } else if (SettingsScreens.PLEX.equals(settingsSubScreenKey)) {
                 buildPlexSettingsUI();
             } else if (SettingsScreens.JELLYFIN.equals(settingsSubScreenKey)) {
@@ -18518,6 +18535,7 @@ if (OverlayKeyGate.isOverlayNavigationKey(code) || Y1InputKeys.isBackKey(code)) 
         }
         if (keyboardPurpose == KEYBOARD_SOULSEEK_PASS
                 || keyboardPurpose == NavidromeSettingsHost.KEYBOARD_PASS
+                || keyboardPurpose == com.solar.launcher.bookorbit.BookOrbitSettingsHost.KEYBOARD_PASS
                 || keyboardPurpose == com.solar.launcher.jellyfin.JellyfinSettingsHost.KEYBOARD_PASS) {
             return getString(R.string.keyboard_enter_password);
         }
@@ -18650,10 +18668,17 @@ if (OverlayKeyGate.isOverlayNavigationKey(code) || Y1InputKeys.isBackKey(code)) 
         else if (keyboardPurpose == KEYBOARD_REPORT_ISSUE) finishReportIssueEntry();
         else if (keyboardPurpose == NavidromeSettingsHost.KEYBOARD_URL
                 || keyboardPurpose == NavidromeSettingsHost.KEYBOARD_USER
-                || keyboardPurpose == NavidromeSettingsHost.KEYBOARD_PASS) {
+                || keyboardPurpose == NavidromeSettingsHost.KEYBOARD_PASS
+                || keyboardPurpose == NavidromeSettingsHost.KEYBOARD_SYNC_TAG) {
             if (navidromeSettingsHost != null) navidromeSettingsHost.finishKeyboard(keyboardPurpose, typedPassword.trim());
             changeScreen(STATE_SETTINGS);
             buildNavidromeSettingsUI();
+        }
+        // 2026-10-21 — BookOrbit URL/user/pass/collection typed → save, back to its settings screen.
+        else if (com.solar.launcher.bookorbit.BookOrbitSettingsHost.ownsKeyboard(keyboardPurpose)) {
+            if (bookOrbitSettingsHost != null) bookOrbitSettingsHost.finishKeyboard(keyboardPurpose, typedPassword.trim());
+            changeScreen(STATE_SETTINGS);
+            buildBookOrbitSettingsUI();
         }
         else if (keyboardPurpose == PlexSettingsHost.KEYBOARD_URL
                 || keyboardPurpose == PlexSettingsHost.KEYBOARD_TOKEN) {
@@ -21327,6 +21352,9 @@ if (OverlayKeyGate.isOverlayNavigationKey(code) || Y1InputKeys.isBackKey(code)) 
         }
         if (SettingsScreens.LIBRARY.equals(settingsSubScreenKey)) {
             if (RowKeys.LIST_WRAPAROUND.equals(rowKey)) return stateOnOff(listWraparound);
+            if (RowKeys.BOOKORBIT_URL.equals(rowKey)) {
+                return com.solar.launcher.bookorbit.BookOrbitSettingsHost.previewValue(this, prefs, rowKey);
+            }
             if (RowKeys.NAVIDROME_URL.equals(rowKey)) return NavidromeSettingsHost.previewValue(prefs, rowKey);
             if (RowKeys.NAVIDROME_USER.equals(rowKey)) return NavidromeSettingsHost.previewValue(prefs, rowKey);
             if (RowKeys.NAVIDROME_PASS.equals(rowKey)) return NavidromeSettingsHost.previewValue(prefs, rowKey);
@@ -21336,7 +21364,15 @@ if (OverlayKeyGate.isOverlayNavigationKey(code) || Y1InputKeys.isBackKey(code)) 
                     || RowKeys.JELLYFIN_PASS.equals(rowKey))
                 return com.solar.launcher.jellyfin.JellyfinSettingsHost.previewValue(prefs, rowKey);
         }
+        if (SettingsScreens.BOOKORBIT.equals(settingsSubScreenKey)) {
+            // 2026-10-21 — BookOrbit rows (server, collection, sync status).
+            return com.solar.launcher.bookorbit.BookOrbitSettingsHost.previewValue(this, prefs, rowKey);
+        }
         if (SettingsScreens.NAVIDROME.equals(settingsSubScreenKey)) {
+            // 2026-10-21 — Sync rows need a Context for On/Off labels.
+            if (rowKey != null && rowKey.startsWith("settings.navidrome.sync_")) {
+                return NavidromeSettingsHost.previewValue(this, prefs, rowKey);
+            }
             if (RowKeys.NAVIDROME_URL.equals(rowKey)) return NavidromeSettingsHost.previewValue(prefs, rowKey);
             if (RowKeys.NAVIDROME_USER.equals(rowKey)) return NavidromeSettingsHost.previewValue(prefs, rowKey);
             if (RowKeys.NAVIDROME_PASS.equals(rowKey)) return NavidromeSettingsHost.previewValue(prefs, rowKey);
@@ -35226,6 +35262,17 @@ if (OverlayKeyGate.isOverlayNavigationKey(code) || Y1InputKeys.isBackKey(code)) 
         });
         containerSettingsItems.addView(btnNavidrome);
 
+        // 2026-10-21 — BookOrbit audiobook server (sync collection → Audiobooks/).
+        LinearLayout btnBookOrbit = createSettingsRow(RowKeys.BOOKORBIT_URL, R.string.settings_bookorbit, true);
+        btnBookOrbit.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                clickFeedback();
+                settingsParentKey = SettingsScreens.LIBRARY;
+                buildBookOrbitSettingsUI();
+            }
+        });
+        containerSettingsItems.addView(btnBookOrbit);
+
         // 2026-07-14: Plex/Jellyfin Library rows only while Debug experiment is On.
         if (com.solar.launcher.plex.PlexExperiment.isEnabled(prefs)) {
             LinearLayout btnPlex = createSettingsRow(RowKeys.PLEX_URL, R.string.settings_plex, true);
@@ -35298,45 +35345,68 @@ if (OverlayKeyGate.isOverlayNavigationKey(code) || Y1InputKeys.isBackKey(code)) 
         }
     }
 
-    /** 2026-07-06: Navidrome URL / user / pass + connection test. */
+    /**
+     * 2026-10-21 — Shared settings-row plumbing for Navidrome + BookOrbit hosts.
+     * Layman: both server screens draw rows, open the keyboard and go back the same way.
+     */
+    private NavidromeSettingsHost.Actions serverSettingsActions() {
+        return new NavidromeSettingsHost.Actions() {
+            @Override public android.app.Activity activity() { return MainActivity.this; }
+            @Override public SharedPreferences prefs() { return prefs; }
+            @Override public void clickFeedback() { MainActivity.this.clickFeedback(); }
+            @Override public LinearLayout createSettingsRow(String rowKey, int labelRes, boolean submenu) {
+                return MainActivity.this.createSettingsRow(rowKey, labelRes, submenu);
+            }
+            @Override public LinearLayout createSettingsRow(String rowKey, CharSequence title, boolean submenu) {
+                return MainActivity.this.createSettingsRow(rowKey, title, submenu, true);
+            }
+            @Override public Button createListButton(String label) { return MainActivity.this.createListButton(label); }
+            @Override public void styleSecondaryLabel(Button btn) { MainActivity.this.styleSecondaryLabel(btn); }
+            @Override public void addSettingsRow(View row) { containerSettingsItems.addView(row); }
+            @Override public void clearSettingsRows() { containerSettingsItems.removeAllViews(); }
+            @Override public void setSettingsSubScreen(String key) { MainActivity.this.setSettingsSubScreen(key); }
+            @Override public void updateStatusBarTitle() { MainActivity.this.updateStatusBarTitle(); }
+            @Override public void applyReachBrowseLayoutMode() { MainActivity.this.applyReachBrowseLayoutMode(); }
+            @Override public void refreshSettingsPreview(String rowKey) { MainActivity.this.refreshSettingsPreview(rowKey); }
+            @Override public void drillSettingsBack(Runnable back) {
+                lastSettingsFocusIndex = librarySettingsMenuFocusIndex;
+                MainActivity.this.drillSettingsBack(back != null ? back : new Runnable() {
+                    @Override public void run() { buildLibrarySettingsUI(); }
+                });
+            }
+            @Override public void openKeyboard(int purpose, String prefill) {
+                keyboardPurpose = purpose;
+                keyboardReturnState = STATE_SETTINGS;
+                keyboardPrefill = prefill != null ? prefill : "";
+                changeScreen(STATE_WIFI_KEYBOARD);
+            }
+            @Override public String previewForRow(String rowKey) {
+                return NavidromeSettingsHost.previewValue(MainActivity.this, prefs, rowKey);
+            }
+            @Override public void onServerSyncFinished() {
+                // 2026-10-21 — New/removed files from a sync → rescan so Library + Audiobooks update.
+                startLibraryScan(false);
+            }
+        };
+    }
+
+    /** 2026-07-06: Navidrome URL / user / pass + connection test. 2026-10-21: + sync rows. */
     private void buildNavidromeSettingsUI() {
         if (navidromeSettingsHost == null) {
-            navidromeSettingsHost = new NavidromeSettingsHost(new NavidromeSettingsHost.Actions() {
-                @Override public android.app.Activity activity() { return MainActivity.this; }
-                @Override public SharedPreferences prefs() { return prefs; }
-                @Override public void clickFeedback() { MainActivity.this.clickFeedback(); }
-                @Override public LinearLayout createSettingsRow(String rowKey, int labelRes, boolean submenu) {
-                    return MainActivity.this.createSettingsRow(rowKey, labelRes, submenu);
-                }
-                @Override public LinearLayout createSettingsRow(String rowKey, CharSequence title, boolean submenu) {
-                    return MainActivity.this.createSettingsRow(rowKey, title, submenu, true);
-                }
-                @Override public Button createListButton(String label) { return MainActivity.this.createListButton(label); }
-                @Override public void styleSecondaryLabel(Button btn) { MainActivity.this.styleSecondaryLabel(btn); }
-                @Override public void addSettingsRow(View row) { containerSettingsItems.addView(row); }
-                @Override public void clearSettingsRows() { containerSettingsItems.removeAllViews(); }
-                @Override public void setSettingsSubScreen(String key) { MainActivity.this.setSettingsSubScreen(key); }
-                @Override public void updateStatusBarTitle() { MainActivity.this.updateStatusBarTitle(); }
-                @Override public void applyReachBrowseLayoutMode() { MainActivity.this.applyReachBrowseLayoutMode(); }
-                @Override public void refreshSettingsPreview(String rowKey) { MainActivity.this.refreshSettingsPreview(rowKey); }
-                @Override public void drillSettingsBack(Runnable back) {
-                    lastSettingsFocusIndex = librarySettingsMenuFocusIndex;
-                    MainActivity.this.drillSettingsBack(back != null ? back : new Runnable() {
-                        @Override public void run() { buildLibrarySettingsUI(); }
-                    });
-                }
-                @Override public void openKeyboard(int purpose, String prefill) {
-                    keyboardPurpose = purpose;
-                    keyboardReturnState = STATE_SETTINGS;
-                    keyboardPrefill = prefill != null ? prefill : "";
-                    changeScreen(STATE_WIFI_KEYBOARD);
-                }
-                @Override public String previewForRow(String rowKey) {
-                    return NavidromeSettingsHost.previewValue(prefs, rowKey);
-                }
-            });
+            navidromeSettingsHost = new NavidromeSettingsHost(serverSettingsActions());
         }
         navidromeSettingsHost.build();
+        if (containerSettingsItems.getChildCount() > 1) {
+            containerSettingsItems.getChildAt(1).requestFocus();
+        }
+    }
+
+    /** 2026-10-21: BookOrbit server, collection and audiobook sync. */
+    private void buildBookOrbitSettingsUI() {
+        if (bookOrbitSettingsHost == null) {
+            bookOrbitSettingsHost = new com.solar.launcher.bookorbit.BookOrbitSettingsHost(serverSettingsActions());
+        }
+        bookOrbitSettingsHost.build();
         if (containerSettingsItems.getChildCount() > 1) {
             containerSettingsItems.getChildAt(1).requestFocus();
         }
@@ -48093,7 +48163,8 @@ if (OverlayKeyGate.isOverlayNavigationKey(code) || Y1InputKeys.isBackKey(code)) 
     private void openAddNavidromeTrackToLocalPlaylistFlow(
             final com.solar.launcher.navidrome.NavidromeSong song) {
         if (song == null) return;
-        final File dest = localRemoteTrackFile("Navidrome", song.artist, song.album, song.title, song.suffix);
+        // 2026-10-21 — Same Music/Navidrome root as NavidromeDownloader (Library-visible).
+        final File dest = localRemoteTrackFile("Music/Navidrome", song.artist, song.album, song.title, song.suffix);
         if (dest != null && dest.exists() && dest.length() > 1024L) {
             openAddToPlaylistFlow(java.util.Collections.singletonList(dest));
             return;

@@ -63,6 +63,8 @@ public final class SettingsScreens {
     public static final String EQ = "settings.eq";
     public static final String LIBRARY_BROWSE = "settings.library_browse";
     public static final String NAVIDROME = "settings.navidrome";
+    /** 2026-10-21 — Settings → Library → BookOrbit server (audiobook sync). */
+    public static final String BOOKORBIT = "settings.bookorbit";
     public static final String PLEX = "settings.plex";
     public static final String JELLYFIN = "settings.jellyfin";
     public static final String RADIO = "settings.radio";
@@ -126,6 +128,7 @@ public final class SettingsScreens {
         if (THEME_VARIANT.equals(key)) return R.string.settings_sub_theme_variant;
         if (LIBRARY_BROWSE.equals(key)) return R.string.settings_sub_library_browse;
         if (NAVIDROME.equals(key)) return R.string.settings_navidrome;
+        if (BOOKORBIT.equals(key)) return R.string.settings_bookorbit;
         if (PLEX.equals(key)) return R.string.settings_plex;
         if (JELLYFIN.equals(key)) return R.string.settings_jellyfin;
         if (RADIO.equals(key)) return R.string.settings_sub_radio;
@@ -205,7 +208,7 @@ public final class SettingsScreens {
                 || Y2_PRIMARY_STORAGE.equals(key)
                 || REACH.equals(key) || SOULSEEK.equals(key) || SOULSEEK_CONNECTION.equals(key)
                 || DEEZER.equals(key) || DEEZER_ACCOUNT.equals(key) || DEEZER_CONNECTION.equals(key)
-                || NAVIDROME.equals(key) || PLEX.equals(key) || JELLYFIN.equals(key) || RADIO.equals(key)
+                || NAVIDROME.equals(key) || BOOKORBIT.equals(key) || PLEX.equals(key) || JELLYFIN.equals(key) || RADIO.equals(key)
                 || RADIO_FM.equals(key) || RADIO_FM_BAND.equals(key)
                 || RADIO_INTERNET_COUNTRY.equals(key) || VIDEO.equals(key)) {
             return true;

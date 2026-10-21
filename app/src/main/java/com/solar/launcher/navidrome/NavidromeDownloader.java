@@ -27,12 +27,19 @@ public final class NavidromeDownloader {
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static final Handler main = new Handler(Looper.getMainLooper());
 
+    /**
+     * 2026-10-21 — Saves live under Music/ so the Library scan (Music roots only) and Rockbox both see them.
+     * Was top-level "Navidrome/" (never scanned). Old files are moved over by NavidromeSync on first sync.
+     */
+    static final String ROOT_DIR = "Music" + File.separator + "Navidrome";
+    static final String LEGACY_ROOT_DIR = "Navidrome";
+
     private NavidromeDownloader() {}
 
     /** Deterministic destination for a downloaded track; shared by Save + Stems UI. */
     public static File destinationFor(Context ctx, NavidromeArtist artist,
             NavidromeAlbum album, NavidromeSong song) {
-        File root = new File(DeviceFeatures.getNewMediaRoot(ctx), "Navidrome");
+        File root = new File(DeviceFeatures.getNewMediaRoot(ctx), ROOT_DIR);
         String artistDir = safeName(artist != null ? artist.name : (album != null ? album.artist : ""));
         String albumDir = safeName(album != null ? album.name : (song != null ? song.album : ""));
         String ext = song != null && song.suffix != null && !song.suffix.isEmpty()
@@ -49,7 +56,7 @@ public final class NavidromeDownloader {
                     postError(cb, "No songs");
                     return;
                 }
-                File root = new File(DeviceFeatures.getNewMediaRoot(ctx), "Navidrome");
+                File root = new File(DeviceFeatures.getNewMediaRoot(ctx), ROOT_DIR);
                 String artistDir = safeName(artist != null ? artist.name : album.artist);
                 String albumDir = safeName(album.name);
                 File dir = new File(new File(root, artistDir), albumDir);

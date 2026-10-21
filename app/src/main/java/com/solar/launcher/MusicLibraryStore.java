@@ -1107,11 +1107,18 @@ public class MusicLibraryStore extends SolarDbHelper {
         public final String path;
         public final int positionMs;
         public final int chapterIndex;
+        /** 2026-10-21 — When this position was saved (ms); lets BookOrbit sync find the book's current file. */
+        public final long updatedAt;
 
         public AudiobookBookmark(String path, int positionMs, int chapterIndex) {
+            this(path, positionMs, chapterIndex, 0L);
+        }
+
+        public AudiobookBookmark(String path, int positionMs, int chapterIndex, long updatedAt) {
             this.path = path;
             this.positionMs = positionMs;
             this.chapterIndex = chapterIndex;
+            this.updatedAt = updatedAt;
         }
     }
 
@@ -1133,7 +1140,8 @@ public class MusicLibraryStore extends SolarDbHelper {
             if (c.moveToFirst()) {
                 return new AudiobookBookmark(path,
                         c.getInt(c.getColumnIndex("position_ms")),
-                        c.getInt(c.getColumnIndex("chapter_index")));
+                        c.getInt(c.getColumnIndex("chapter_index")),
+                        c.getLong(c.getColumnIndex("updated_at")));
             }
         } finally {
             if (c != null) c.close();
@@ -1151,7 +1159,8 @@ public class MusicLibraryStore extends SolarDbHelper {
                 String path = c.getString(c.getColumnIndex("path"));
                 out.put(path, new AudiobookBookmark(path,
                         c.getInt(c.getColumnIndex("position_ms")),
-                        c.getInt(c.getColumnIndex("chapter_index"))));
+                        c.getInt(c.getColumnIndex("chapter_index")),
+                        c.getLong(c.getColumnIndex("updated_at"))));
             }
         } finally {
             if (c != null) c.close();

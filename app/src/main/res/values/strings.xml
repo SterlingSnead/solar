@@ -712,6 +712,17 @@
     <string name="navidrome_download_album">Download album for offline</string>
     <string name="navidrome_downloading">Downloading… %1$d / %2$d</string>
     <string name="navidrome_download_done">Downloaded %1$d tracks</string>
+    <!-- 2026-10-21 — Server sync (Navidrome music + BookOrbit audiobooks). -->
+    <string name="navidrome_sync_starred">Sync starred music</string>
+    <string name="navidrome_sync_tag">Sync playlists tagged</string>
+    <string name="server_sync_auto">Auto-sync on Wi‑Fi</string>
+    <string name="server_sync_now">Sync now</string>
+    <string name="server_sync_started">Sync started</string>
+    <string name="server_sync_done">Sync done: %1$s</string>
+    <string name="settings_bookorbit">BookOrbit server</string>
+    <string name="bookorbit_settings_collection">Sync collection</string>
+    <string name="bookorbit_test_ok">BookOrbit OK · collection \"%1$s\" has %2$d books</string>
+    <string name="bookorbit_test_missing">Signed in · create a collection named \"%1$s\"</string>
     <string name="library_search_section_plex">Online: Plex</string>
     <string name="library_search_searching_plex">Searching Plex…</string>
     <string name="get_music_source_plex">Plex</string>

@@ -102,6 +102,19 @@ public final class RowKeys {
     public static final String NAVIDROME_USER = "settings.navidrome.user";
     public static final String NAVIDROME_PASS = "settings.navidrome.pass";
     public static final String NAVIDROME_TEST = "settings.navidrome.test";
+    // 2026-10-21 — Navidrome → device sync rows (starred + "#sync" playlists).
+    public static final String NAVIDROME_SYNC_STARRED = "settings.navidrome.sync_starred";
+    public static final String NAVIDROME_SYNC_TAG = "settings.navidrome.sync_tag";
+    public static final String NAVIDROME_SYNC_AUTO = "settings.navidrome.sync_auto";
+    public static final String NAVIDROME_SYNC_NOW = "settings.navidrome.sync_now";
+    // 2026-10-21 — BookOrbit audiobook server + sync rows.
+    public static final String BOOKORBIT_URL = "settings.bookorbit.url";
+    public static final String BOOKORBIT_USER = "settings.bookorbit.user";
+    public static final String BOOKORBIT_PASS = "settings.bookorbit.pass";
+    public static final String BOOKORBIT_COLLECTION = "settings.bookorbit.collection";
+    public static final String BOOKORBIT_TEST = "settings.bookorbit.test";
+    public static final String BOOKORBIT_SYNC_AUTO = "settings.bookorbit.sync_auto";
+    public static final String BOOKORBIT_SYNC_NOW = "settings.bookorbit.sync_now";
     public static final String PLEX_URL = "settings.plex.url";
     public static final String PLEX_TOKEN = "settings.plex.token";
     public static final String PLEX_TEST = "settings.plex.test";
@@ -364,6 +377,17 @@ public final class RowKeys {
         if (NAVIDROME_USER.equals(rowKey)) return R.string.navidrome_settings_user;
         if (NAVIDROME_PASS.equals(rowKey)) return R.string.navidrome_settings_pass;
         if (NAVIDROME_TEST.equals(rowKey)) return R.string.navidrome_settings_test;
+        if (NAVIDROME_SYNC_STARRED.equals(rowKey)) return R.string.navidrome_sync_starred;
+        if (NAVIDROME_SYNC_TAG.equals(rowKey)) return R.string.navidrome_sync_tag;
+        if (NAVIDROME_SYNC_AUTO.equals(rowKey)) return R.string.server_sync_auto;
+        if (NAVIDROME_SYNC_NOW.equals(rowKey)) return R.string.server_sync_now;
+        if (BOOKORBIT_URL.equals(rowKey)) return R.string.navidrome_settings_url;
+        if (BOOKORBIT_USER.equals(rowKey)) return R.string.navidrome_settings_user;
+        if (BOOKORBIT_PASS.equals(rowKey)) return R.string.navidrome_settings_pass;
+        if (BOOKORBIT_COLLECTION.equals(rowKey)) return R.string.bookorbit_settings_collection;
+        if (BOOKORBIT_TEST.equals(rowKey)) return R.string.navidrome_settings_test;
+        if (BOOKORBIT_SYNC_AUTO.equals(rowKey)) return R.string.server_sync_auto;
+        if (BOOKORBIT_SYNC_NOW.equals(rowKey)) return R.string.server_sync_now;
         if (PLEX_URL.equals(rowKey)) return R.string.plex_settings_url;
         if (PLEX_TOKEN.equals(rowKey)) return R.string.plex_settings_token;
         if (PLEX_TEST.equals(rowKey)) return R.string.plex_settings_test;
