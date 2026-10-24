@@ -34,6 +34,8 @@ public final class NavidromeSettingsHost {
         String previewForRow(String rowKey);
         /** 2026-10-21 — A server sync finished; MainActivity rescans the library so new files show up. */
         void onServerSyncFinished();
+        /** 2026-10-21 — Which settings screen is showing (async loads skip stale rebuilds). */
+        String settingsSubScreen();
     }
 
     public static final int KEYBOARD_URL = 17;

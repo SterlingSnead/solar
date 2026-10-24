@@ -111,7 +111,9 @@ public final class RowKeys {
     public static final String BOOKORBIT_URL = "settings.bookorbit.url";
     public static final String BOOKORBIT_USER = "settings.bookorbit.user";
     public static final String BOOKORBIT_PASS = "settings.bookorbit.pass";
-    public static final String BOOKORBIT_COLLECTION = "settings.bookorbit.collection";
+    /** 2026-10-21 — Opens the libraries/collections picker; each picker row is SOURCE_PREFIX + "lib:3"/"col:7". */
+    public static final String BOOKORBIT_SOURCES = "settings.bookorbit.sources";
+    public static final String BOOKORBIT_SOURCE_PREFIX = "settings.bookorbit.src.";
     public static final String BOOKORBIT_TEST = "settings.bookorbit.test";
     public static final String BOOKORBIT_SYNC_AUTO = "settings.bookorbit.sync_auto";
     public static final String BOOKORBIT_SYNC_NOW = "settings.bookorbit.sync_now";
@@ -384,7 +386,7 @@ public final class RowKeys {
         if (BOOKORBIT_URL.equals(rowKey)) return R.string.navidrome_settings_url;
         if (BOOKORBIT_USER.equals(rowKey)) return R.string.navidrome_settings_user;
         if (BOOKORBIT_PASS.equals(rowKey)) return R.string.navidrome_settings_pass;
-        if (BOOKORBIT_COLLECTION.equals(rowKey)) return R.string.bookorbit_settings_collection;
+        if (BOOKORBIT_SOURCES.equals(rowKey)) return R.string.bookorbit_sync_sources;
         if (BOOKORBIT_TEST.equals(rowKey)) return R.string.navidrome_settings_test;
         if (BOOKORBIT_SYNC_AUTO.equals(rowKey)) return R.string.server_sync_auto;
         if (BOOKORBIT_SYNC_NOW.equals(rowKey)) return R.string.server_sync_now;

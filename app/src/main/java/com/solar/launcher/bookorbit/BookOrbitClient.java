@@ -106,14 +106,51 @@ public final class BookOrbitClient {
         return parseArray(call("GET", "/collections", null));
     }
 
-    /** 2026-10-21 — Case-insensitive collection lookup; -1 when missing. */
-    public int findCollectionId(String name) throws IOException {
-        JSONArray arr = collections();
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject c = arr.optJSONObject(i);
-            if (c != null && c.optString("name", "").trim().equalsIgnoreCase(name.trim())) return c.optInt("id", -1);
+    /**
+     * 2026-10-21 — Book libraries the user can open; [{id,type,name,...}].
+     * Podcast libraries are left out (their books endpoint rejects them).
+     */
+    public JSONArray bookLibraries() throws IOException {
+        JSONArray all = parseArray(call("GET", "/libraries", null));
+        JSONArray out = new JSONArray();
+        for (int i = 0; i < all.length(); i++) {
+            JSONObject l = all.optJSONObject(i);
+            if (l != null && !"podcasts".equals(l.optString("type", "books"))) out.put(l);
         }
-        return -1;
+        return out;
+    }
+
+    /** 2026-10-21 — Every book card in a library (POST /libraries/{id}/books, 200 per page). */
+    public List<JSONObject> libraryBooks(int libraryId) throws IOException {
+        List<JSONObject> out = new ArrayList<JSONObject>();
+        for (int page = 0; page < 5000; page++) {
+            String body = "{\"sort\":[],\"pagination\":{\"page\":" + page + ",\"size\":200}}";
+            JSONObject res = parseObject(call("POST", "/libraries/" + libraryId + "/books", body));
+            JSONArray items = res.optJSONArray("items");
+            if (items == null || items.length() == 0) break;
+            for (int i = 0; i < items.length(); i++) out.add(items.optJSONObject(i));
+            if (out.size() >= res.optInt("total", Integer.MAX_VALUE) || items.length() < 200) break;
+        }
+        return out;
+    }
+
+    /**
+     * 2026-10-21 — Does this book card have audio? Matches BookOrbit's own rule (content/primary file
+     * in m4b/mp3/m4a/opus/ogg/flac). Cards without a files list return true so the manifest decides.
+     */
+    static boolean hasAudio(JSONObject card) {
+        JSONArray files = card != null ? card.optJSONArray("files") : null;
+        if (files == null) return true;
+        for (int i = 0; i < files.length(); i++) {
+            JSONObject f = files.optJSONObject(i);
+            if (f == null) continue;
+            String role = f.optString("role", "");
+            if (!"content".equals(role) && !"primary".equals(role)) continue;
+            String fmt = f.optString("format", "").trim().toLowerCase(Locale.US);
+            if (fmt.equals("m4b") || fmt.equals("mp3") || fmt.equals("m4a") || fmt.equals("opus")
+                    || fmt.equals("ogg") || fmt.equals("flac")) return true;
+        }
+        return false;
     }
 
     /** 2026-10-21 — Every book card in a collection (0-based pages of 50). */

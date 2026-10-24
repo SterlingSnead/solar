@@ -720,9 +720,13 @@
     <string name="server_sync_started">Sync started</string>
     <string name="server_sync_done">Sync done: %1$s</string>
     <string name="settings_bookorbit">BookOrbit server</string>
-    <string name="bookorbit_settings_collection">Sync collection</string>
-    <string name="bookorbit_test_ok">BookOrbit OK · collection \"%1$s\" has %2$d books</string>
-    <string name="bookorbit_test_missing">Signed in · create a collection named \"%1$s\"</string>
+    <string name="bookorbit_sync_sources">Sync sources</string>
+    <string name="bookorbit_sources_loading">Loading libraries…</string>
+    <string name="bookorbit_sources_none">No libraries or collections found</string>
+    <string name="bookorbit_sources_selected">%1$d selected</string>
+    <string name="bookorbit_source_library">Library: %1$s</string>
+    <string name="bookorbit_source_collection">Collection: %1$s</string>
+    <string name="bookorbit_test_ok">BookOrbit OK · %1$d libraries · %2$d collections</string>
     <string name="library_search_section_plex">Online: Plex</string>
     <string name="library_search_searching_plex">Searching Plex…</string>
     <string name="get_music_source_plex">Plex</string>

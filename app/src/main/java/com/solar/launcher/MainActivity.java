@@ -15092,6 +15092,12 @@ public class MainActivity extends Activity {
                 buildNavidromeSettingsUI();
             } else if (SettingsScreens.BOOKORBIT.equals(settingsSubScreenKey)) {
                 buildBookOrbitSettingsUI();
+            } else if (SettingsScreens.BOOKORBIT_SOURCES.equals(settingsSubScreenKey)) {
+                // 2026-10-21 — Library/collection picker (rebuilds from its cached server list).
+                if (bookOrbitSettingsHost == null) {
+                    bookOrbitSettingsHost = new com.solar.launcher.bookorbit.BookOrbitSettingsHost(serverSettingsActions());
+                }
+                bookOrbitSettingsHost.buildSources();
             } else if (SettingsScreens.PLEX.equals(settingsSubScreenKey)) {
                 buildPlexSettingsUI();
             } else if (SettingsScreens.JELLYFIN.equals(settingsSubScreenKey)) {
@@ -21364,7 +21370,8 @@ if (OverlayKeyGate.isOverlayNavigationKey(code) || Y1InputKeys.isBackKey(code)) 
                     || RowKeys.JELLYFIN_PASS.equals(rowKey))
                 return com.solar.launcher.jellyfin.JellyfinSettingsHost.previewValue(prefs, rowKey);
         }
-        if (SettingsScreens.BOOKORBIT.equals(settingsSubScreenKey)) {
+        if (SettingsScreens.BOOKORBIT.equals(settingsSubScreenKey)
+                || SettingsScreens.BOOKORBIT_SOURCES.equals(settingsSubScreenKey)) {
             // 2026-10-21 — BookOrbit rows (server, collection, sync status).
             return com.solar.launcher.bookorbit.BookOrbitSettingsHost.previewValue(this, prefs, rowKey);
         }
@@ -35387,6 +35394,7 @@ if (OverlayKeyGate.isOverlayNavigationKey(code) || Y1InputKeys.isBackKey(code)) 
                 // 2026-10-21 — New/removed files from a sync → rescan so Library + Audiobooks update.
                 startLibraryScan(false);
             }
+            @Override public String settingsSubScreen() { return settingsSubScreenKey; }
         };
     }
 

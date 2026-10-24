@@ -27,8 +27,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 2026-10-21 — BookOrbit → Audiobooks/ mirror with two-way listening position.
- * Layman: put books in a BookOrbit collection (default "Solar") and they appear on the player;
- * take them out and they're removed. Where you stopped listening is shared both ways, so you can
+ * Layman: pick any mix of BookOrbit libraries and collections ("sync sources"); their audiobooks
+ * appear on the player, and books that leave them are removed. Where you stopped listening is shared both ways, so you can
  * switch between the player and the BookOrbit app.
  * Tech: /audiobooks/{id}/manifest + assets → Audiobooks/Author/Title/NN - Title.ext; positions merge
  * between Solar's audiobook_bookmarks and /playback-state via a last-synced snapshot (3-way merge).
@@ -66,11 +66,13 @@ public final class BookOrbitSync {
     public static final String PREF_URL = "bookorbit_url";
     public static final String PREF_USER = "bookorbit_user";
     public static final String PREF_PASS = "bookorbit_pass";
-    public static final String PREF_COLLECTION = "bookorbit_collection";
+    /** 2026-10-21 — Chosen sources, comma-separated tokens: "lib:3,col:7". */
+    public static final String PREF_SOURCES = "bookorbit_sources";
     public static final String PREF_AUTO = "bookorbit_sync_auto";
     public static final String PREF_LAST_MS = "bookorbit_sync_last_ms";
     public static final String PREF_STATUS = "bookorbit_sync_status";
-    public static final String DEFAULT_COLLECTION = "Solar";
+    static final String LIB = "lib:";
+    static final String COL = "col:";
 
     static final String MANIFEST_NAME = ".bookorbit-sync.json";
     /** ponytail: fixed headroom; upgrade path is summing manifest sizeBytes before each book. */
@@ -156,8 +158,8 @@ public final class BookOrbitSync {
 
     /**
      * 2026-10-21 — Whole sync on the calling thread.
-     * Layman: 1) find the collection, 2) download each book's audio, 3) share positions,
-     * 4) remove books this sync added that left the collection.
+     * Layman: 1) list the chosen libraries + collections, 2) download each book's audio, 3) share positions,
+     * 4) remove books this sync added that left all of them.
      */
     static Result runBlocking(Context ctx, SharedPreferences prefs, Listener l) throws Exception {
         BookOrbitClient client = client(prefs);
@@ -165,12 +167,11 @@ public final class BookOrbitSync {
         File root = AudiobookLibrary.getRoot(ctx);
         // 2026-10-21 — Phone builds can have no storage picked yet → relative path; refuse instead.
         if (root == null || !root.isAbsolute()) throw new Exception("No storage selected");
-        String collection = prefs.getString(PREF_COLLECTION, DEFAULT_COLLECTION);
+        Set<String> sources = parseSources(prefs.getString(PREF_SOURCES, ""));
+        if (sources.isEmpty()) throw new Exception("Choose Sync sources in BookOrbit settings");
 
         l.onStatus("Signing in…");
-        int collectionId = client.findCollectionId(collection);
-        if (collectionId < 0) throw new Exception("Create a BookOrbit collection named \"" + collection + "\"");
-        List<JSONObject> cards = client.collectionBooks(collectionId);
+        List<JSONObject> cards = collectSourceBooks(client, sources);
 
         File manifestFile = new File(root, MANIFEST_NAME);
         JSONObject manifest = SyncFiles.readJson(manifestFile);
@@ -183,7 +184,8 @@ public final class BookOrbitSync {
         int n = 0;
         for (JSONObject card : cards) {
             n++;
-            if (card == null) continue;
+            // 2026-10-21 — Skip ebook-only cards up front (saves a manifest call per ebook in big libraries).
+            if (card == null || !BookOrbitClient.hasAudio(card)) continue;
             int bookId = card.optInt("id", -1);
             if (bookId < 0) continue;
             String key = String.valueOf(bookId);
@@ -202,7 +204,7 @@ public final class BookOrbitSync {
             }
         }
 
-        // Books this sync added that left the collection. Skipped when the collection came back empty.
+        // Books this sync added that left every chosen source. Skipped when the sources came back empty.
         if (!cards.isEmpty()) {
             for (String key : SyncFiles.keys(oldBooks)) {
                 if (newBooks.has(key)) continue;
@@ -220,7 +222,7 @@ public final class BookOrbitSync {
 
     /**
      * 2026-10-21 — One book: download missing parts, then merge position. Returns its manifest entry,
-     * or null when the book has no audio (ebook-only cards in the same collection are ignored).
+     * or null when the book has no audio (ebook-only cards in a source are ignored).
      */
     private static JSONObject syncBook(Context ctx, BookOrbitClient client, MusicLibraryStore store, File root,
             int bookId, JSONObject prev, Result r, Listener l, int n, int total) throws Exception {
@@ -355,7 +357,61 @@ public final class BookOrbitSync {
         }
     }
 
+    /**
+     * 2026-10-21 — Union of all chosen libraries + collections, de-duplicated by book id.
+     * A chosen source that no longer exists on the server stops the sync before anything is deleted.
+     */
+    static List<JSONObject> collectSourceBooks(BookOrbitClient client, Set<String> sources) throws Exception {
+        Set<String> available = new HashSet<String>();
+        JSONArray libs = client.bookLibraries();
+        for (int i = 0; i < libs.length(); i++) available.add(LIB + libs.optJSONObject(i).optInt("id"));
+        JSONArray cols = client.collections();
+        for (int i = 0; i < cols.length(); i++) available.add(COL + cols.optJSONObject(i).optInt("id"));
+
+        java.util.LinkedHashMap<Integer, JSONObject> byId = new java.util.LinkedHashMap<Integer, JSONObject>();
+        for (String src : sources) {
+            if (!available.contains(src)) throw new Exception("A sync source was removed on the server — update Sync sources");
+            int id = Integer.parseInt(src.substring(4));
+            List<JSONObject> books = src.startsWith(LIB) ? client.libraryBooks(id) : client.collectionBooks(id);
+            for (JSONObject b : books) {
+                if (b != null && b.optInt("id", -1) >= 0 && !byId.containsKey(b.optInt("id"))) byId.put(b.optInt("id"), b);
+            }
+        }
+        return new ArrayList<JSONObject>(byId.values());
+    }
+
     // ---- Pure helpers (unit-tested in BookOrbitSyncTest) ----
+
+    /** 2026-10-21 — "lib:3, col:7,junk" → {lib:3, col:7}; keeps order, drops anything malformed. */
+    static Set<String> parseSources(String csv) {
+        Set<String> out = new java.util.LinkedHashSet<String>();
+        if (csv == null) return out;
+        for (String t : csv.split(",")) {
+            String s = t.trim();
+            if (s.matches("(lib|col):\\d+")) out.add(s);
+        }
+        return out;
+    }
+
+    /** 2026-10-21 — Turn one source on/off; returns the new pref string. */
+    public static String toggleSource(String csv, String token) {
+        Set<String> set = parseSources(csv);
+        if (!set.remove(token)) set.add(token);
+        StringBuilder sb = new StringBuilder();
+        for (String t : set) {
+            if (sb.length() > 0) sb.append(',');
+            sb.append(t);
+        }
+        return sb.toString();
+    }
+
+    public static boolean isSourceOn(SharedPreferences prefs, String token) {
+        return prefs != null && parseSources(prefs.getString(PREF_SOURCES, "")).contains(token);
+    }
+
+    public static int sourceCount(SharedPreferences prefs) {
+        return prefs != null ? parseSources(prefs.getString(PREF_SOURCES, "")).size() : 0;
+    }
 
     /** 2026-10-21 — 3-way merge rule. ponytail: "both changed" trusts device clocks (NTP-synced on Wi-Fi). */
     static Decision decide(boolean localChanged, boolean serverChanged, long localUpdatedAt, long serverCapturedAt) {

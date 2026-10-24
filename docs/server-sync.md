@@ -24,12 +24,16 @@ Files land in `Music/Navidrome/Artist/Album/Title.ext`, the original file from t
 
 **Settings → Library → BookOrbit server**
 
-1. In BookOrbit (web), create a collection named **Solar** and add the audiobooks you want on the player.
-2. On the player, enter the server URL (e.g. `192.168.1.20:6060`), username and password. Use the LAN address; plain `http://` on your home network is the most reliable on the Y1's old Android version.
-3. **Test connection** confirms the login and how many books are in the collection.
+1. Enter the server URL (e.g. `192.168.1.20:6060`), username and password. Use the LAN address; plain `http://` on your home network is the most reliable on the Y1's old Android version.
+2. **Test connection** shows how many libraries and collections your account can see.
+3. **Sync sources** lists every book library (`Library: …`) and collection (`Collection: …`). Turn on as many as you like; a book in two of them is copied once. Podcast libraries aren't listed.
 4. **Sync now**, or turn on **Auto-sync on Wi‑Fi**.
 
-Books go to `Audiobooks/Author/Title/` (multi-part books as `01 - Title.mp3`, `02 - …`), with `cover.jpg`. Ebook-only items in the collection are ignored. Removing a book from the collection removes it from the player.
+Books go to `Audiobooks/Author/Title/` (multi-part books as `01 - Title.mp3`, `02 - …`), with `cover.jpg`. Ebooks in a chosen library are skipped. A book is removed from the player once it's no longer in *any* chosen source (or you turn that source off).
+
+**Tip:** a whole library can be large. A collection (e.g. "On the Y1") is the easy way to choose exactly what fits on the card.
+
+**Formats:** whatever BookOrbit serves, unconverted — m4b, m4a, mp3, flac, ogg, opus. Solar plays all of them; for m4b/m4a it reads the embedded chapters so you can jump between them.
 
 **Listening position syncs both ways** for books played in Solar's audiobook player:
 
@@ -41,6 +45,7 @@ Books go to `Audiobooks/Author/Title/` (multi-part books as `01 - Title.mp3`, `0
 
 - Sync only deletes files it downloaded itself (tracked in `Music/Navidrome/.solar-sync.json` and `Audiobooks/.bookorbit-sync.json`). Your own files and manual saves are never removed.
 - If the server returns an empty list (outage, wrong account), nothing is deleted.
+- If a chosen library or collection was deleted on the server, the sync stops with a message instead of removing that source's books.
 - Downloads go to `*.part` and are renamed when complete; interrupted downloads resume.
 - Sync stops downloading when less than 256 MB is free and says "storage full".
 
@@ -55,10 +60,10 @@ Books go to `Audiobooks/Author/Title/` (multi-part books as `01 - Title.mp3`, `0
 | File | Role |
 |---|---|
 | `navidrome/NavidromeSync.java` | Subsonic `getStarred2` / `getPlaylists` / `getPlaylist` / `getAlbum` → mirror + `.m3u8`. |
-| `bookorbit/BookOrbitClient.java` | `/api/v1` bearer client: login, collections, audiobook manifest/assets, playback-state (server 3.0+). Re-logs in on 401. |
-| `bookorbit/BookOrbitSync.java` | Collection mirror + 3-way position merge against a per-book snapshot (`snapPath/snapPos/snapRev`). |
-| `bookorbit/BookOrbitSettingsHost.java` | Settings rows; reuses `NavidromeSettingsHost.Actions`. |
+| `bookorbit/BookOrbitClient.java` | `/api/v1` bearer client: login, `GET /libraries` (books type), `POST /libraries/{id}/books`, collections, audiobook manifest/assets, playback-state (server 3.0+). Re-logs in on 401. |
+| `bookorbit/BookOrbitSync.java` | Mirror of the union of chosen sources (pref `bookorbit_sources` = `lib:3,col:7`) + 3-way position merge against a per-book snapshot (`snapPath/snapPos/snapRev`). |
+| `bookorbit/BookOrbitSettingsHost.java` | Settings rows + the Sync sources picker (fetched off the UI thread); reuses `NavidromeSettingsHost.Actions`. |
 | `sync/SyncFiles.java` | Manifest read/atomic write, folder pruning, Wi‑Fi check. |
-| `MainActivity` | `serverSettingsActions()` (shared row plumbing), `buildBookOrbitSettingsUI()`, keyboard ids 25 and 34–37, `maybeAuto(...)` in `runDeferredInternetAvailabilityHooks()`. |
+| `MainActivity` | `serverSettingsActions()` (shared row plumbing), `buildBookOrbitSettingsUI()`, keyboard ids 25 and 34–36, `maybeAuto(...)` in `runDeferredInternetAvailabilityHooks()`, `SettingsScreens.BOOKORBIT_SOURCES` restore. |
 
 BookOrbit position writes use the server's optimistic concurrency: `baseRevision` (409 → re-read and retry once) and `manifestRevision` (412 → skip; next sync re-downloads first). Unit tests: `NavidromeSyncTest`, `BookOrbitSyncTest`.

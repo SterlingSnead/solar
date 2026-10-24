@@ -60,4 +60,25 @@ public class BookOrbitSyncTest {
         if (BookOrbitClient.parseIso("2026-10-21T12:00:00Z") != t) throw new AssertionError("no millis");
         if (BookOrbitClient.parseIso("garbage") != 0L) throw new AssertionError("bad input → 0");
     }
+
+    @Test
+    public void sourcesParseAndToggle() {
+        java.util.Set<String> s = BookOrbitSync.parseSources(" lib:3, col:7,junk,lib:x,col:7");
+        if (!s.toString().equals("[lib:3, col:7]")) throw new AssertionError("parse " + s);
+        if (!"lib:3".equals(BookOrbitSync.toggleSource("lib:3,col:7", "col:7"))) throw new AssertionError("toggle off");
+        if (!"lib:3,lib:5".equals(BookOrbitSync.toggleSource("lib:3", "lib:5"))) throw new AssertionError("toggle on");
+        if (!BookOrbitSync.parseSources(null).isEmpty()) throw new AssertionError("null → empty");
+    }
+
+    @Test
+    public void audioDetectionMatchesBookOrbitFormats() throws Exception {
+        org.json.JSONObject m4b = new org.json.JSONObject("{\"files\":[{\"role\":\"primary\",\"format\":\"M4B\"}]}");
+        org.json.JSONObject epub = new org.json.JSONObject("{\"files\":[{\"role\":\"primary\",\"format\":\"epub\"}]}");
+        org.json.JSONObject coverOnly = new org.json.JSONObject("{\"files\":[{\"role\":\"cover\",\"format\":\"mp3\"}]}");
+        org.json.JSONObject unknown = new org.json.JSONObject("{\"id\":1}");
+        if (!BookOrbitClient.hasAudio(m4b)) throw new AssertionError("m4b is audio");
+        if (BookOrbitClient.hasAudio(epub)) throw new AssertionError("epub is not");
+        if (BookOrbitClient.hasAudio(coverOnly)) throw new AssertionError("non-content file ignored");
+        if (!BookOrbitClient.hasAudio(unknown)) throw new AssertionError("no file list → let manifest decide");
+    }
 }
