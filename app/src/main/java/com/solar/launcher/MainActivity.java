@@ -15092,12 +15092,12 @@ public class MainActivity extends Activity {
                 buildNavidromeSettingsUI();
             } else if (SettingsScreens.BOOKORBIT.equals(settingsSubScreenKey)) {
                 buildBookOrbitSettingsUI();
-            } else if (SettingsScreens.BOOKORBIT_SOURCES.equals(settingsSubScreenKey)) {
-                // 2026-10-21 — Library/collection picker (rebuilds from its cached server list).
+            } else if (SettingsScreens.isBookOrbit(settingsSubScreenKey)) {
+                // 2026-10-21 — Audiobook / book-list / podcast pickers (rebuild from cached lists).
                 if (bookOrbitSettingsHost == null) {
                     bookOrbitSettingsHost = new com.solar.launcher.bookorbit.BookOrbitSettingsHost(serverSettingsActions());
                 }
-                bookOrbitSettingsHost.buildSources();
+                bookOrbitSettingsHost.rebuild(settingsSubScreenKey);
             } else if (SettingsScreens.PLEX.equals(settingsSubScreenKey)) {
                 buildPlexSettingsUI();
             } else if (SettingsScreens.JELLYFIN.equals(settingsSubScreenKey)) {
@@ -18682,9 +18682,14 @@ if (OverlayKeyGate.isOverlayNavigationKey(code) || Y1InputKeys.isBackKey(code)) 
         }
         // 2026-10-21 — BookOrbit URL/user/pass/collection typed → save, back to its settings screen.
         else if (com.solar.launcher.bookorbit.BookOrbitSettingsHost.ownsKeyboard(keyboardPurpose)) {
-            if (bookOrbitSettingsHost != null) bookOrbitSettingsHost.finishKeyboard(keyboardPurpose, typedPassword.trim());
+            // 2026-10-21 — Server fields save + back to BookOrbit; Search opens the results list.
+            final int boPurpose = keyboardPurpose;
+            final String boText = typedPassword.trim();
             changeScreen(STATE_SETTINGS);
-            buildBookOrbitSettingsUI();
+            if (bookOrbitSettingsHost == null) {
+                bookOrbitSettingsHost = new com.solar.launcher.bookorbit.BookOrbitSettingsHost(serverSettingsActions());
+            }
+            bookOrbitSettingsHost.afterKeyboard(boPurpose, boText);
         }
         else if (keyboardPurpose == PlexSettingsHost.KEYBOARD_URL
                 || keyboardPurpose == PlexSettingsHost.KEYBOARD_TOKEN) {
@@ -21370,8 +21375,7 @@ if (OverlayKeyGate.isOverlayNavigationKey(code) || Y1InputKeys.isBackKey(code)) 
                     || RowKeys.JELLYFIN_PASS.equals(rowKey))
                 return com.solar.launcher.jellyfin.JellyfinSettingsHost.previewValue(prefs, rowKey);
         }
-        if (SettingsScreens.BOOKORBIT.equals(settingsSubScreenKey)
-                || SettingsScreens.BOOKORBIT_SOURCES.equals(settingsSubScreenKey)) {
+        if (SettingsScreens.isBookOrbit(settingsSubScreenKey)) {
             // 2026-10-21 — BookOrbit rows (server, collection, sync status).
             return com.solar.launcher.bookorbit.BookOrbitSettingsHost.previewValue(this, prefs, rowKey);
         }
@@ -35395,6 +35399,11 @@ if (OverlayKeyGate.isOverlayNavigationKey(code) || Y1InputKeys.isBackKey(code)) 
                 startLibraryScan(false);
             }
             @Override public String settingsSubScreen() { return settingsSubScreenKey; }
+            @Override public void focusSettingsRow(int index) {
+                if (index >= 0 && index < containerSettingsItems.getChildCount()) {
+                    containerSettingsItems.getChildAt(index).requestFocus();
+                }
+            }
         };
     }
 

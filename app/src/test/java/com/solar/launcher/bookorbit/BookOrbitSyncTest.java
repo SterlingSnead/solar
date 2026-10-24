@@ -62,12 +62,37 @@ public class BookOrbitSyncTest {
     }
 
     @Test
-    public void sourcesParseAndToggle() {
-        java.util.Set<String> s = BookOrbitSync.parseSources(" lib:3, col:7,junk,lib:x,col:7");
-        if (!s.toString().equals("[lib:3, col:7]")) throw new AssertionError("parse " + s);
-        if (!"lib:3".equals(BookOrbitSync.toggleSource("lib:3,col:7", "col:7"))) throw new AssertionError("toggle off");
-        if (!"lib:3,lib:5".equals(BookOrbitSync.toggleSource("lib:3", "lib:5"))) throw new AssertionError("toggle on");
+    public void picksParseAndToggle() {
+        java.util.Set<String> s = BookOrbitSync.parseSources(" book:3, col:7,junk,lib:5,pod:9:42,pod:9,col:7");
+        if (!s.toString().equals("[book:3, col:7, pod:9:42]")) throw new AssertionError("parse " + s);
+        if (!"book:3".equals(BookOrbitSync.toggleSource("book:3,col:7", "col:7"))) throw new AssertionError("toggle off");
+        if (!"book:3,pod:9:42".equals(BookOrbitSync.toggleSource("book:3", "pod:9:42"))) throw new AssertionError("toggle on");
         if (!BookOrbitSync.parseSources(null).isEmpty()) throw new AssertionError("null → empty");
+    }
+
+    @Test
+    public void podcastHelpers() {
+        int[] ids = BookOrbitPodcastSync.parseShowToken("pod:9:42");
+        if (ids == null || ids[0] != 9 || ids[1] != 42) throw new AssertionError("show token");
+        if (BookOrbitPodcastSync.parseShowToken("pod:9") != null) throw new AssertionError("bad token");
+        if (!"mp3".equals(BookOrbitPodcastSync.extFor("audio/mpeg")) || !"m4a".equals(BookOrbitPodcastSync.extFor("mp4"))
+                || !"mp3".equals(BookOrbitPodcastSync.extFor(null)) || !"opus".equals(BookOrbitPodcastSync.extFor("opus")))
+            throw new AssertionError("ext");
+        if (BookOrbitSettingsHost.nextEpisodeCount(3) != 5 || BookOrbitSettingsHost.nextEpisodeCount(10) != 1)
+            throw new AssertionError("episodes cycle");
+    }
+
+    @Test
+    public void pickedTitlesRemembered() throws Exception {
+        String t = BookOrbitSettingsHost.updateTitles("{}", "book:12", "Dune · Frank Herbert", true);
+        if (!"Dune · Frank Herbert".equals(new org.json.JSONObject(t).optString("12"))) throw new AssertionError("add");
+        t = BookOrbitSettingsHost.updateTitles(t, "book:12", "x", false);
+        if (new org.json.JSONObject(t).has("12")) throw new AssertionError("remove");
+        java.util.List<String[]> rows = new java.util.ArrayList<String[]>();
+        BookOrbitSettingsHost.addAudioRows(new org.json.JSONArray("[{\"id\":5,\"title\":\"Dune\",\"authors\":[\"Herbert\"],"
+                + "\"files\":[{\"role\":\"primary\",\"format\":\"m4b\"}]},{\"id\":6,\"title\":\"Ebook\",\"files\":[{\"role\":\"primary\",\"format\":\"epub\"}]}]"), rows);
+        if (rows.size() != 1 || !"book:5".equals(rows.get(0)[0]) || !"Dune · Herbert".equals(rows.get(0)[1]))
+            throw new AssertionError("browse rows");
     }
 
     @Test

@@ -106,32 +106,99 @@ public final class BookOrbitClient {
         return parseArray(call("GET", "/collections", null));
     }
 
-    /**
-     * 2026-10-21 — Book libraries the user can open; [{id,type,name,...}].
-     * Podcast libraries are left out (their books endpoint rejects them).
-     */
+    /** 2026-10-21 — Book libraries (type "books"); podcast libraries come from podcastLibraries(). */
     public JSONArray bookLibraries() throws IOException {
+        return librariesOfType(false);
+    }
+
+    /** 2026-10-21 — Podcast libraries (type "podcasts"). */
+    public JSONArray podcastLibraries() throws IOException {
+        return librariesOfType(true);
+    }
+
+    private JSONArray librariesOfType(boolean podcasts) throws IOException {
         JSONArray all = parseArray(call("GET", "/libraries", null));
         JSONArray out = new JSONArray();
         for (int i = 0; i < all.length(); i++) {
             JSONObject l = all.optJSONObject(i);
-            if (l != null && !"podcasts".equals(l.optString("type", "books"))) out.put(l);
+            if (l != null && "podcasts".equals(l.optString("type", "books")) == podcasts) out.put(l);
         }
         return out;
     }
 
-    /** 2026-10-21 — Every book card in a library (POST /libraries/{id}/books, 200 per page). */
-    public List<JSONObject> libraryBooks(int libraryId) throws IOException {
+    /**
+     * 2026-10-21 — One page of a book library for on-device browsing, sorted by title.
+     * Layman: what you scroll through when picking books. query may be null (no search).
+     * Returns {items:[...], total:n}.
+     */
+    public JSONObject libraryBooksPage(int libraryId, int page, int size, String query) throws IOException {
+        JSONObject body = new JSONObject();
+        try {
+            JSONArray sort = new JSONArray();
+            sort.put(new JSONObject().put("field", "title").put("dir", "asc"));
+            body.put("sort", sort);
+            body.put("pagination", new JSONObject().put("page", page).put("size", size));
+            if (query != null && query.trim().length() > 0) body.put("q", query.trim());
+        } catch (Exception ignored) {}
+        return parseObject(call("POST", "/libraries/" + libraryId + "/books", body.toString()));
+    }
+
+    // ---- Podcasts (2026-10-21) ----
+
+    /** 2026-10-21 — Every show in a podcast library (100 per page). */
+    public List<JSONObject> podcastShows(int libraryId) throws IOException {
         List<JSONObject> out = new ArrayList<JSONObject>();
-        for (int page = 0; page < 5000; page++) {
-            String body = "{\"sort\":[],\"pagination\":{\"page\":" + page + ",\"size\":200}}";
-            JSONObject res = parseObject(call("POST", "/libraries/" + libraryId + "/books", body));
+        for (int page = 0; page < 100; page++) {
+            JSONObject res = parseObject(call("GET", "/podcast-libraries/" + libraryId + "/podcasts?page=" + page + "&size=100", null));
             JSONArray items = res.optJSONArray("items");
             if (items == null || items.length() == 0) break;
             for (int i = 0; i < items.length(); i++) out.add(items.optJSONObject(i));
-            if (out.size() >= res.optInt("total", Integer.MAX_VALUE) || items.length() < 200) break;
+            if (out.size() >= res.optInt("total", Integer.MAX_VALUE) || items.length() < 100) break;
         }
         return out;
+    }
+
+    /** 2026-10-21 — Newest episodes of one show, with this user's position/finished state. */
+    public JSONArray showEpisodes(int libraryId, int podcastId, int size) throws IOException {
+        int n = Math.max(1, Math.min(100, size));
+        JSONObject res = parseObject(call("GET", "/podcast-libraries/" + libraryId + "/episodes?podcastId=" + podcastId
+                + "&filter=latest&sort=newest&page=0&size=" + n, null));
+        JSONArray items = res.optJSONArray("items");
+        return items != null ? items : new JSONArray();
+    }
+
+    /** 2026-10-21 — Listening state for many episodes at once; map by episodeId. */
+    public java.util.Map<Integer, JSONObject> episodeStates(java.util.Collection<Integer> ids) throws IOException {
+        java.util.Map<Integer, JSONObject> out = new java.util.HashMap<Integer, JSONObject>();
+        if (ids == null || ids.isEmpty()) return out;
+        List<Integer> all = new ArrayList<Integer>(ids);
+        for (int from = 0; from < all.size(); from += 100) {
+            JSONArray chunk = new JSONArray();
+            for (int i = from; i < Math.min(all.size(), from + 100); i++) chunk.put(all.get(i));
+            String body = "{\"episodeIds\":" + chunk.toString() + "}";
+            JSONArray rows = parseArray(call("POST", "/podcast-episodes/state-batch", body));
+            for (int i = 0; i < rows.length(); i++) {
+                JSONObject r = rows.optJSONObject(i);
+                if (r != null) out.put(r.optInt("episodeId"), r);
+            }
+        }
+        return out;
+    }
+
+    /** 2026-10-21 — Save episode position (seconds) and/or finished; capturedAt lets the server drop stale writes. */
+    public void putEpisodeState(int episodeId, Long positionSeconds, Boolean finished) throws IOException {
+        JSONObject body = new JSONObject();
+        try {
+            if (positionSeconds != null) body.put("positionSeconds", Math.max(0L, positionSeconds));
+            if (finished != null) body.put("finished", finished.booleanValue());
+            body.put("capturedAt", isoNow());
+        } catch (Exception ignored) {}
+        call("PATCH", "/podcast-episodes/" + episodeId + "/state", body.toString());
+    }
+
+    /** 2026-10-21 — Episode audio (server copy or proxied feed) to a file, resuming a partial. */
+    public void downloadEpisode(int episodeId, File dest) throws IOException {
+        download("/podcast-episodes/" + episodeId + "/stream", dest, true);
     }
 
     /**

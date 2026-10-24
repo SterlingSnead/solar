@@ -36,6 +36,8 @@ public final class NavidromeSettingsHost {
         void onServerSyncFinished();
         /** 2026-10-21 — Which settings screen is showing (async loads skip stale rebuilds). */
         String settingsSubScreen();
+        /** 2026-10-21 — Move focus to row i (keeps your place after "More…" loads a page). */
+        void focusSettingsRow(int index);
     }
 
     public static final int KEYBOARD_URL = 17;

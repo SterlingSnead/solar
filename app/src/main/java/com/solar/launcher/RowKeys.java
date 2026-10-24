@@ -111,8 +111,15 @@ public final class RowKeys {
     public static final String BOOKORBIT_URL = "settings.bookorbit.url";
     public static final String BOOKORBIT_USER = "settings.bookorbit.user";
     public static final String BOOKORBIT_PASS = "settings.bookorbit.pass";
-    /** 2026-10-21 — Opens the libraries/collections picker; each picker row is SOURCE_PREFIX + "lib:3"/"col:7". */
-    public static final String BOOKORBIT_SOURCES = "settings.bookorbit.sources";
+    /** 2026-10-21 — BookOrbit pickers. Pick rows are SOURCE_PREFIX + "book:12" / "col:7" / "pod:9:42". */
+    public static final String BOOKORBIT_BOOKS = "settings.bookorbit.books";
+    public static final String BOOKORBIT_PODCASTS = "settings.bookorbit.podcasts";
+    public static final String BOOKORBIT_PICKED = "settings.bookorbit.picked";
+    public static final String BOOKORBIT_SEARCH = "settings.bookorbit.search";
+    public static final String BOOKORBIT_EPISODES = "settings.bookorbit.episodes";
+    public static final String BOOKORBIT_MORE = "settings.bookorbit.more";
+    public static final String BOOKORBIT_INFO = "settings.bookorbit.info";
+    public static final String BOOKORBIT_LIB_PREFIX = "settings.bookorbit.lib.";
     public static final String BOOKORBIT_SOURCE_PREFIX = "settings.bookorbit.src.";
     public static final String BOOKORBIT_TEST = "settings.bookorbit.test";
     public static final String BOOKORBIT_SYNC_AUTO = "settings.bookorbit.sync_auto";
@@ -386,7 +393,11 @@ public final class RowKeys {
         if (BOOKORBIT_URL.equals(rowKey)) return R.string.navidrome_settings_url;
         if (BOOKORBIT_USER.equals(rowKey)) return R.string.navidrome_settings_user;
         if (BOOKORBIT_PASS.equals(rowKey)) return R.string.navidrome_settings_pass;
-        if (BOOKORBIT_SOURCES.equals(rowKey)) return R.string.bookorbit_sync_sources;
+        if (BOOKORBIT_BOOKS.equals(rowKey)) return R.string.bookorbit_audiobooks;
+        if (BOOKORBIT_PODCASTS.equals(rowKey)) return R.string.bookorbit_podcasts;
+        if (BOOKORBIT_PICKED.equals(rowKey)) return R.string.bookorbit_on_player;
+        if (BOOKORBIT_SEARCH.equals(rowKey)) return R.string.bookorbit_search;
+        if (BOOKORBIT_EPISODES.equals(rowKey)) return R.string.bookorbit_episodes_per_show;
         if (BOOKORBIT_TEST.equals(rowKey)) return R.string.navidrome_settings_test;
         if (BOOKORBIT_SYNC_AUTO.equals(rowKey)) return R.string.server_sync_auto;
         if (BOOKORBIT_SYNC_NOW.equals(rowKey)) return R.string.server_sync_now;

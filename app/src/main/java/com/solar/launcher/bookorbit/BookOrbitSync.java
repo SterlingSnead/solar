@@ -27,8 +27,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 2026-10-21 — BookOrbit → Audiobooks/ mirror with two-way listening position.
- * Layman: pick any mix of BookOrbit libraries and collections ("sync sources"); their audiobooks
- * appear on the player, and books that leave them are removed. Where you stopped listening is shared both ways, so you can
+ * Layman: pick individual books (browse/search on the player) and/or whole collections; they
+ * appear on the player, and books you un-pick are removed. Podcasts: see BookOrbitPodcastSync. Where you stopped listening is shared both ways, so you can
  * switch between the player and the BookOrbit app.
  * Tech: /audiobooks/{id}/manifest + assets → Audiobooks/Author/Title/NN - Title.ext; positions merge
  * between Solar's audiobook_bookmarks and /playback-state via a last-synced snapshot (3-way merge).
@@ -50,10 +50,19 @@ public final class BookOrbitSync {
         public int pulled;
         public int failed;
         public boolean storageFull;
+        // 2026-10-21 — Podcast episode counts (BookOrbitPodcastSync).
+        public int podDownloaded;
+        public int podRemoved;
+        public int podPushed;
+        public int podPulled;
+        public boolean podcastsRan;
 
         public String summary() {
             String s = String.format(Locale.US, "%d books · %d files new · %d removed · %d↑ %d↓ positions",
                     books, downloaded, removed, pushed, pulled);
+            if (podcastsRan) {
+                s += String.format(Locale.US, " · podcasts %d new, %d removed", podDownloaded, podRemoved);
+            }
             if (failed > 0) s += " · " + failed + " failed";
             if (storageFull) s += " · storage full";
             return s;
@@ -66,13 +75,22 @@ public final class BookOrbitSync {
     public static final String PREF_URL = "bookorbit_url";
     public static final String PREF_USER = "bookorbit_user";
     public static final String PREF_PASS = "bookorbit_pass";
-    /** 2026-10-21 — Chosen sources, comma-separated tokens: "lib:3,col:7". */
+    /**
+     * 2026-10-21 — Chosen items, comma-separated tokens: "book:12" (one book), "col:7" (a collection),
+     * "pod:9:42" (podcast show 42 in podcast library 9).
+     */
     public static final String PREF_SOURCES = "bookorbit_sources";
+    /** 2026-10-21 — {"12":"Dune · Frank Herbert"} so the "On this player" list works offline. */
+    public static final String PREF_TITLES = "bookorbit_titles";
+    /** 2026-10-21 — Newest unfinished episodes kept per podcast show. */
+    public static final String PREF_EPISODES = "bookorbit_episodes_per_show";
+    public static final int DEFAULT_EPISODES = 3;
     public static final String PREF_AUTO = "bookorbit_sync_auto";
     public static final String PREF_LAST_MS = "bookorbit_sync_last_ms";
     public static final String PREF_STATUS = "bookorbit_sync_status";
-    static final String LIB = "lib:";
+    static final String BOOK = "book:";
     static final String COL = "col:";
+    static final String POD = "pod:";
 
     static final String MANIFEST_NAME = ".bookorbit-sync.json";
     /** ponytail: fixed headroom; upgrade path is summing manifest sizeBytes before each book. */
@@ -168,10 +186,13 @@ public final class BookOrbitSync {
         // 2026-10-21 — Phone builds can have no storage picked yet → relative path; refuse instead.
         if (root == null || !root.isAbsolute()) throw new Exception("No storage selected");
         Set<String> sources = parseSources(prefs.getString(PREF_SOURCES, ""));
-        if (sources.isEmpty()) throw new Exception("Choose Sync sources in BookOrbit settings");
+        if (sources.isEmpty()) throw new Exception("Choose audiobooks or podcasts in BookOrbit settings");
 
         l.onStatus("Signing in…");
+        client.login(); // fail loudly on a bad password (single-book picks need no listing call)
         List<JSONObject> cards = collectSourceBooks(client, sources);
+        // 2026-10-21 — Only an empty *collection* is suspicious; un-picking every book is a real request.
+        boolean emptyIsSuspicious = cards.isEmpty() && hasCollection(sources);
 
         File manifestFile = new File(root, MANIFEST_NAME);
         JSONObject manifest = SyncFiles.readJson(manifestFile);
@@ -204,8 +225,8 @@ public final class BookOrbitSync {
             }
         }
 
-        // Books this sync added that left every chosen source. Skipped when the sources came back empty.
-        if (!cards.isEmpty()) {
+        // Books this sync added that are no longer picked. Skipped when a collection came back empty.
+        if (!emptyIsSuspicious) {
             for (String key : SyncFiles.keys(oldBooks)) {
                 if (newBooks.has(key)) continue;
                 r.removed += deleteOwnedFiles(root, oldBooks.optJSONObject(key));
@@ -217,7 +238,28 @@ public final class BookOrbitSync {
         manifest.put("v", 1);
         manifest.put("books", newBooks);
         SyncFiles.writeJsonAtomic(manifestFile, manifest);
+
+        // 2026-10-21 — Podcasts after books; a podcast problem never undoes the book sync.
+        List<String> shows = BookOrbitPodcastSync.showTokens(sources);
+        File mediaRoot = com.solar.launcher.DeviceFeatures.getNewMediaRoot(ctx);
+        File podManifest = new File(new File(mediaRoot, "Podcasts"), BookOrbitPodcastSync.MANIFEST_NAME);
+        if (mediaRoot != null && (!shows.isEmpty() || podManifest.isFile())) {
+            try {
+                BookOrbitPodcastSync.run(client, mediaRoot, new java.util.LinkedHashSet<String>(shows),
+                        Math.max(1, prefs.getInt(PREF_EPISODES, DEFAULT_EPISODES)), podcastLocal(ctx), l, r);
+                r.podcastsRan = true;
+            } catch (Exception e) {
+                r.failed++;
+            }
+        }
         return r;
+    }
+
+    /** 2026-10-21 — Test hook; production uses Solar's podcast stores. */
+    static BookOrbitPodcastSync.Local testPodcastLocal;
+
+    private static BookOrbitPodcastSync.Local podcastLocal(Context ctx) {
+        return testPodcastLocal != null ? testPodcastLocal : new BookOrbitPodcastLocal(ctx);
     }
 
     /**
@@ -358,37 +400,47 @@ public final class BookOrbitSync {
     }
 
     /**
-     * 2026-10-21 — Union of all chosen libraries + collections, de-duplicated by book id.
-     * A chosen source that no longer exists on the server stops the sync before anything is deleted.
+     * 2026-10-21 — Picked books + every book in picked collections, de-duplicated by id.
+     * A picked collection that no longer exists on the server stops the sync before anything is deleted.
+     * Picked books need no listing; a book deleted on the server just fails its manifest and is kept.
      */
     static List<JSONObject> collectSourceBooks(BookOrbitClient client, Set<String> sources) throws Exception {
-        Set<String> available = new HashSet<String>();
-        JSONArray libs = client.bookLibraries();
-        for (int i = 0; i < libs.length(); i++) available.add(LIB + libs.optJSONObject(i).optInt("id"));
-        JSONArray cols = client.collections();
-        for (int i = 0; i < cols.length(); i++) available.add(COL + cols.optJSONObject(i).optInt("id"));
-
         java.util.LinkedHashMap<Integer, JSONObject> byId = new java.util.LinkedHashMap<Integer, JSONObject>();
         for (String src : sources) {
-            if (!available.contains(src)) throw new Exception("A sync source was removed on the server — update Sync sources");
-            int id = Integer.parseInt(src.substring(4));
-            List<JSONObject> books = src.startsWith(LIB) ? client.libraryBooks(id) : client.collectionBooks(id);
-            for (JSONObject b : books) {
-                if (b != null && b.optInt("id", -1) >= 0 && !byId.containsKey(b.optInt("id"))) byId.put(b.optInt("id"), b);
+            if (src.startsWith(BOOK)) {
+                int id = Integer.parseInt(src.substring(BOOK.length()));
+                if (!byId.containsKey(id)) byId.put(id, new JSONObject().put("id", id));
+            }
+        }
+        if (hasCollection(sources)) {
+            Set<String> available = new HashSet<String>();
+            JSONArray cols = client.collections();
+            for (int i = 0; i < cols.length(); i++) available.add(COL + cols.optJSONObject(i).optInt("id"));
+            for (String src : sources) {
+                if (!src.startsWith(COL)) continue;
+                if (!available.contains(src)) throw new Exception("A chosen collection was removed on the server — update your picks");
+                for (JSONObject b : client.collectionBooks(Integer.parseInt(src.substring(COL.length())))) {
+                    if (b != null && b.optInt("id", -1) >= 0 && !byId.containsKey(b.optInt("id"))) byId.put(b.optInt("id"), b);
+                }
             }
         }
         return new ArrayList<JSONObject>(byId.values());
     }
 
+    static boolean hasCollection(Set<String> sources) {
+        for (String s : sources) if (s.startsWith(COL)) return true;
+        return false;
+    }
+
     // ---- Pure helpers (unit-tested in BookOrbitSyncTest) ----
 
-    /** 2026-10-21 — "lib:3, col:7,junk" → {lib:3, col:7}; keeps order, drops anything malformed. */
+    /** 2026-10-21 — "book:3, col:7,pod:9:4,junk" → {book:3, col:7, pod:9:4}; keeps order, drops malformed. */
     static Set<String> parseSources(String csv) {
         Set<String> out = new java.util.LinkedHashSet<String>();
         if (csv == null) return out;
         for (String t : csv.split(",")) {
             String s = t.trim();
-            if (s.matches("(lib|col):\\d+")) out.add(s);
+            if (s.matches("(book|col):\\d+|pod:\\d+:\\d+")) out.add(s);
         }
         return out;
     }
@@ -409,8 +461,12 @@ public final class BookOrbitSync {
         return prefs != null && parseSources(prefs.getString(PREF_SOURCES, "")).contains(token);
     }
 
-    public static int sourceCount(SharedPreferences prefs) {
-        return prefs != null ? parseSources(prefs.getString(PREF_SOURCES, "")).size() : 0;
+    /** 2026-10-21 — How many picks start with prefix ("book:", "col:", "pod:"). */
+    public static int count(SharedPreferences prefs, String prefix) {
+        int n = 0;
+        if (prefs == null) return 0;
+        for (String s : parseSources(prefs.getString(PREF_SOURCES, ""))) if (s.startsWith(prefix)) n++;
+        return n;
     }
 
     /** 2026-10-21 — 3-way merge rule. ponytail: "both changed" trusts device clocks (NTP-synced on Wi-Fi). */
