@@ -22,6 +22,8 @@ concurrency:
 
 jobs:
   release:
+    # 2026-10-29 — Fork: upstream-only (needs upstream secrets / publishes upstream). Forks use build-y2-fork.yml.
+    if: github.repository == 'thesolarproject/solar'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:

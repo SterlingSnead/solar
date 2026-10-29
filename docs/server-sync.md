@@ -2,7 +2,7 @@
 
 <!-- 2026-10-21 — Added with feature/server-sync. -->
 
-Solar can keep a copy of your self-hosted music and audiobooks on the player and update it whenever it's on Wi‑Fi. Everything plays offline afterwards, in Solar and in Rockbox.
+Solar can keep a copy of your self-hosted music and audiobooks on the player and update it whenever it's on Wi‑Fi. Everything plays offline afterwards.
 
 ## Navidrome
 
@@ -58,7 +58,6 @@ Podcast episodes go to `Podcasts/‹Show›/‹Episode›.ext` and appear in Sol
 
 ## Known limits
 
-- **Rockbox bookmarks don't sync yet.** Rockbox plays the synced files and playlists, but its `.bmark` positions aren't read or written. Use Solar's audiobook player for position sync.
 - **Plex/Jellyfin** still save to their old top-level folders (not part of this change).
 - Conflict resolution when both sides changed compares the player's clock with the server's. Solar sets its clock automatically when online (SolarAutoTime), so this is normally fine.
 

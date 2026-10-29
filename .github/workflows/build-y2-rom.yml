@@ -9,6 +9,8 @@ on:
 
 jobs:
   build-y2-rom:
+    # 2026-10-29 — Fork: upstream-only (needs upstream secrets / publishes upstream). Forks use build-y2-fork.yml.
+    if: github.repository == 'thesolarproject/solar'
     name: Build Y2 ROM
     runs-on: ubuntu-latest
     permissions:

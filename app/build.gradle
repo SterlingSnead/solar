@@ -90,7 +90,10 @@ android {
         targetSdk 35
         versionCode 3488287
         versionName "20260819-1007"
-        buildConfigField "boolean", "FEATURE_OTA_UPDATE", "true"
+        // 2026-10-29 — Fork builds pass -PSOLAR_FEATURE_OTA=false so the player never "updates" to
+        // upstream Solar (which lacks this fork's Navidrome/BookOrbit sync). Unset = upstream behaviour.
+        def otaEnabled = (project.findProperty("SOLAR_FEATURE_OTA") ?: "true").toString().toBoolean()
+        buildConfigField "boolean", "FEATURE_OTA_UPDATE", "${otaEnabled}"
         buildConfigField "String", "OTA_UPDATES_URL", "\"https://thesolarproject.github.io/solar-update/updates.xml\""
         def podcastIndexKey = project.findProperty("PODCAST_INDEX_API_KEY") ?: ""
         def podcastIndexSecret = project.findProperty("PODCAST_INDEX_API_SECRET") ?: ""

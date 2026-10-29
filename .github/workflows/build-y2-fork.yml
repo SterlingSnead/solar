@@ -1,0 +1,134 @@
+# 2026-10-29 — Fork build: Solar + Navidrome/BookOrbit sync for the Innioasis Y2 (no Rockbox).
+# Layman: push to main (or Actions → Run workflow); the ROM appears under Releases as
+#   "Solar Y2 (sync)" and as a run artifact.
+# Tech: release APK (OTA off) + `build-rom.sh y2` (upstream default: Rockbox/JJ stripped). Platform
+#   key = repo secrets if set, else the public AOSP test key the Y2 stock firmware is signed with —
+#   the same material upstream keeps in SOLAR_PLATFORM_KEY_*_B64.
+name: Build Y2 ROM (fork)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: y2-fork-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SOLAR_Y2_BASE_ZIP: ${{ vars.SOLAR_Y2_BASE_ZIP }}
+
+jobs:
+  y2:
+    if: github.repository != 'thesolarproject/solar'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Record build start time (UTC)
+        run: echo "SOURCE_DATE_EPOCH=$(date -u +%s)" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-35" "platforms;android-19" "build-tools;35.0.0"
+
+      - name: Install ROM build dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y unzip zip e2fsprogs curl util-linux kmod openssl android-sdk-libsparse-utils
+          sudo modprobe loop || true
+
+      - name: Platform signing key (secrets, else public AOSP test key)
+        env:
+          KEY_PK8_B64: ${{ secrets.SOLAR_PLATFORM_KEY_PK8_B64 }}
+          KEY_PEM_B64: ${{ secrets.SOLAR_PLATFORM_KEY_PEM_B64 }}
+        run: |
+          mkdir -p .ci-keys
+          if [ -n "$KEY_PK8_B64" ] && [ -n "$KEY_PEM_B64" ]; then
+            printf '%s' "$KEY_PK8_B64" | base64 -d > .ci-keys/platform.pk8
+            printf '%s' "$KEY_PEM_B64" | base64 -d > .ci-keys/platform.x509.pem
+          else
+            base=https://raw.githubusercontent.com/aosp-mirror/platform_build/main/target/product/security
+            curl -fsSL -o .ci-keys/platform.pk8 "$base/platform.pk8"
+            curl -fsSL -o .ci-keys/platform.x509.pem "$base/platform.x509.pem"
+          fi
+          fp=$(openssl x509 -in .ci-keys/platform.x509.pem -noout -fingerprint -sha1 | cut -d= -f2)
+          echo "platform cert SHA-1: $fp"
+          [ "$fp" = "27:19:6E:38:6B:87:5E:76:AD:F7:00:E7:EA:84:E4:C6:EE:E3:3D:FA" ] \
+            || echo "::warning::platform cert is not the AOSP test key — make sure it matches your Y2 firmware"
+          echo "SOLAR_PLATFORM_KEY_PK8=$GITHUB_WORKSPACE/.ci-keys/platform.pk8" >> "$GITHUB_ENV"
+          echo "SOLAR_PLATFORM_KEY_PEM=$GITHUB_WORKSPACE/.ci-keys/platform.x509.pem" >> "$GITHUB_ENV"
+
+      - name: Build platform.keystore
+        run: |
+          chmod +x scripts/ensure-platform-keystore.sh scripts/env.sh
+          ./scripts/ensure-platform-keystore.sh
+          test -f .gradle/platform.keystore
+
+      - name: Sync Y1/Y2 scripts into APK assets
+        run: |
+          chmod +x solar-rom/scripts/*.sh
+          ./solar-rom/scripts/sync-y1-assets.sh
+          ./solar-rom/scripts/sync-platform-assets.sh
+
+      - name: Unit tests (Navidrome + BookOrbit sync)
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest --tests "com.solar.launcher.navidrome.*" --tests "com.solar.launcher.bookorbit.*" -q
+
+      - name: Build signed release APK (OTA off)
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+          ORG_GRADLE_PROJECT_SOLAR_FEATURE_OTA: "false"
+        run: |
+          chmod +x scripts/build.sh
+          ./scripts/build.sh
+
+      - name: Build Y2 ROM
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+        run: |
+          mkdir -p dist
+          sudo modprobe loop max_loop=64 2>/dev/null || true
+          ./solar-rom/scripts/build-rom.sh y2 --apk app/build/outputs/apk/release/app-release.apk dist/rom_y2.zip
+          ./solar-rom/scripts/verify-y2-rom-flash.sh dist/rom_y2.zip
+          cp app/build/outputs/apk/release/app-release.apk dist/solar-sync.apk
+          ls -lh dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rom_y2
+          path: |
+            dist/rom_y2.zip
+            dist/solar-sync.apk
+          retention-days: 30
+          compression-level: 0
+
+      - name: Publish to this fork's Releases
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: y2-sync-latest
+          name: "Solar Y2 (sync) ${{ github.sha }}"
+          body: |
+            Solar for the Innioasis Y2 with Navidrome + BookOrbit sync (no Rockbox, OTA off).
+            Flash rom_y2.zip like any Solar Y2 release. solar-sync.apk is the same Solar build on its own.
+            Built from ${{ github.sha }}.
+          make_latest: true
+          files: |
+            dist/rom_y2.zip
+            dist/solar-sync.apk
