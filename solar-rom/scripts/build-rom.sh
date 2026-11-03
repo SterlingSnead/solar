@@ -844,6 +844,15 @@ audit_rom_contents() {
         errors=$((errors + 1))
     fi
 
+    # 2026-11-02 — Every native lib inside the Solar APK must be loadable from /system/lib.
+    local apk_so
+    for apk_so in $(unzip -Z1 "$sys_mount/app/$SYSTEM_APK_NAME" 2>/dev/null | grep -E '^lib/armeabi(-v7a)?/[^/]+\.so$' | xargs -r -n1 basename | sort -u); do
+        if [ ! -f "$sys_mount/lib/$apk_so" ]; then
+            echo "audit fail: /system/lib/$apk_so missing (Solar APK needs it; system apps don't unpack libs)" >&2
+            errors=$((errors + 1))
+        fi
+    done
+
     if [ ! -f "$sys_mount/app/SolarHomeHelper.apk" ]; then
         echo "audit fail: SolarHomeHelper.apk missing from /system/app (HOME middle-man)" >&2
         errors=$((errors + 1))
@@ -1489,6 +1498,32 @@ sudo mkdir -p "$MOUNT_SYS/app" "$MOUNT_SYS/usr/keylayout"
 sudo cp "$STAGING_APK" "$MOUNT_SYS/app/$SYSTEM_APK_NAME"
 sudo chmod 644 "$MOUNT_SYS/app/$SYSTEM_APK_NAME"
 sudo chown root:root "$MOUNT_SYS/app/$SYSTEM_APK_NAME"
+
+# 2026-11-02 — Fork fix: KitKat/JB never unpack native libs for /system/app APKs; the class
+# loader only searches /vendor/lib + /system/lib. Copy Solar's own .so files there, or
+# WolfiusTlsService dies at boot with UnsatisfiedLinkError: Couldn't load wolfssl.
+# Layman: put Solar's helper libraries where Android looks for them.
+# Libraries the stock firmware already has (ijkplayer, libc++_shared) are left alone.
+install_solar_native_libs() {
+    local apk="$1" lib_dir="$2" tmp so name added=0
+    tmp="$(mktemp -d)"
+    unzip -q -o "$apk" 'lib/armeabi-v7a/*.so' -d "$tmp" 2>/dev/null \
+        || unzip -q -o "$apk" 'lib/armeabi/*.so' -d "$tmp" 2>/dev/null || true
+    for so in "$tmp"/lib/*/*.so; do
+        [ -f "$so" ] || continue
+        name="$(basename "$so")"
+        if [ -f "$lib_dir/$name" ]; then
+            echo "    keep stock /system/lib/$name"
+            continue
+        fi
+        sudo install -m 644 -o root -g root "$so" "$lib_dir/$name"
+        echo "    + /system/lib/$name (from Solar APK)"
+        added=$((added + 1))
+    done
+    rm -rf "$tmp"
+    echo "==> Solar native libs: $added added to /system/lib"
+}
+install_solar_native_libs "$STAGING_APK" "$MOUNT_SYS/lib"
 
 UPDATER_APK="${SOLAR_UPDATER_APK:-$REPO_ROOT/solar-updater/build/outputs/apk/release/solar-updater-release.apk}"
 if [ -f "$UPDATER_APK" ]; then
